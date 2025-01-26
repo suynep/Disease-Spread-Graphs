@@ -1,0 +1,6 @@
+pygame
+networkx
+matplotlib
+numpy
+pandas
+
