@@ -7,7 +7,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 # Constants
 WIDTH, HEIGHT = 600, 600
-GRID_NUMBER = 15  # Number of rows/columns
+GRID_NUMBER = 50  # Number of rows/columns
 CELL_SIZE = WIDTH // GRID_NUMBER  # Adjust cell size based on grid number
 FPS = 10
 
@@ -59,7 +59,7 @@ def save_grid_to_csv(grid, filename):
     df = pd.DataFrame(grid)
     df.to_csv(filename, index=False, header=False)
 
-def update_grid(grid, disease):
+def update_grid(grid, disease, immune_duration):
     new_grid = grid.copy()
     infection_prob = DISEASES[disease]["infection_prob"]
     recovery_prob = DISEASES[disease]["recovery_prob"]
@@ -74,10 +74,18 @@ def update_grid(grid, disease):
                         new_grid[i, j] = 3  # Dead
                     else:
                         new_grid[i, j] = 2  # Immune
+                        immune_duration[i, j] = 0  # Reset immune duration
             elif grid[i, j] == 2:  # Immune
-                # Check if the immune individual becomes susceptible again
-                if np.random.rand() < 0.02:  # 2% chance of losing immunity
-                    new_grid[i, j] = 0  # Susceptible
+                # Increment immune duration
+                immune_duration[i, j] += 1
+                # Check if immune for more than 50 days
+                if immune_duration[i, j] > 50:
+                    new_grid[i, j] = 4  # Vaccinated
+                else:
+                    # Check if the immune individual becomes susceptible again
+                    if np.random.rand() < 0.05:  # 5% chance of losing immunity
+                        new_grid[i, j] = 0  # Susceptible
+                        immune_duration[i, j] = 0  # Reset immune duration
             elif grid[i, j] == 0:  # Susceptible
                 # Check neighbors for infection
                 for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # Only horizontal and vertical neighbors
@@ -87,7 +95,7 @@ def update_grid(grid, disease):
                             new_grid[i, j] = 1
                             break
             # Vaccinated individuals (state 4) remain unchanged
-    return new_grid
+    return new_grid, immune_duration
 
 # Graph setup
 fig, ax = plt.subplots(figsize=(6, 6))  # Increased graph size
@@ -133,7 +141,10 @@ def draw_graph():
     return pygame.image.frombuffer(buf.tobytes(), canvas.get_width_height(), "RGBA")
 
 # Load initial grid state from CSV
-grid = load_grid_from_csv("initial_stateasdflkj.csv")
+grid = load_grid_from_csv("initial_stateasdlfj.csv")
+
+# Track immune duration for each cell
+immune_duration = np.zeros((GRID_NUMBER, GRID_NUMBER), dtype=int)
 
 # Track population over time
 population_data = {disease: {"susceptible": [], "infected": [], "immune": [], "dead": [], "vaccinated": []} for disease in DISEASES}
@@ -141,6 +152,10 @@ population_data = {disease: {"susceptible": [], "infected": [], "immune": [], "d
 running = True
 simulation_running = False  # Variable to control the simulation state
 current_disease = None  # No disease selected initially
+
+def no_infected_left(grid):
+    # Check if there are no infected individuals left
+    return np.sum(grid == 1) == 0
 
 while running:
     screen.fill(BLACK)
@@ -178,13 +193,18 @@ while running:
                     grid[i, j] = 4  # Set to vaccinated
 
     if simulation_running and current_disease:
-        grid = update_grid(grid, current_disease)
+        grid, immune_duration = update_grid(grid, current_disease, immune_duration)
         # Update population data
         population_data[current_disease]["susceptible"].append(np.sum(grid == 0))
         population_data[current_disease]["infected"].append(np.sum(grid == 1))
         population_data[current_disease]["immune"].append(np.sum(grid == 2))
         population_data[current_disease]["dead"].append(np.sum(grid == 3))
         population_data[current_disease]["vaccinated"].append(np.sum(grid == 4))
+        
+        # Stop simulation if no infected individuals are left
+        if no_infected_left(grid):
+            simulation_running = False
+            print("Simulation stopped: No infected individuals left.")
     
     build_graph(grid, current_disease if current_disease else "COVID-19")
     
