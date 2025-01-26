@@ -7,7 +7,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 # Constants
 WIDTH, HEIGHT = 600, 600
-GRID_NUMBER = 50  # Number of rows/columns
+GRID_NUMBER = 30  # Number of rows/columns
 CELL_SIZE = WIDTH // GRID_NUMBER  # Adjust cell size based on grid number
 FPS = 10
 
@@ -18,6 +18,7 @@ RED = (255, 0, 0)  # Infected (COVID-19)
 GREEN = (0, 255, 0)  # Immune
 BLUE = (0, 0, 255)  # Infected (HIV)
 YELLOW = (255, 255, 0)  # Infected (Bird Flu)
+DODGER_BLUE = (30, 144, 255)  # Vaccinated
 
 # Disease Properties
 DISEASES = {
@@ -44,7 +45,7 @@ DISEASES = {
 # Initialize pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH + 500, HEIGHT))  # Extra space for graph
-pygame.display.set_caption("Disease Spread Simulation with Disease Selection")
+pygame.display.set_caption("Disease Spread Simulation with Vaccination")
 clock = pygame.time.Clock()
 
 def load_grid_from_csv(filename):
@@ -73,6 +74,10 @@ def update_grid(grid, disease):
                         new_grid[i, j] = 3  # Dead
                     else:
                         new_grid[i, j] = 2  # Immune
+            elif grid[i, j] == 2:  # Immune
+                # Check if the immune individual becomes susceptible again
+                if np.random.rand() < 0.02:  # 2% chance of losing immunity
+                    new_grid[i, j] = 0  # Susceptible
             elif grid[i, j] == 0:  # Susceptible
                 # Check neighbors for infection
                 for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # Only horizontal and vertical neighbors
@@ -81,6 +86,7 @@ def update_grid(grid, disease):
                         if np.random.rand() < infection_prob:
                             new_grid[i, j] = 1
                             break
+            # Vaccinated individuals (state 4) remain unchanged
     return new_grid
 
 # Graph setup
@@ -107,6 +113,8 @@ def build_graph(grid, disease):
                 G.add_node(node, color=GREEN)  # Use RGB tuple for green
             elif grid[i, j] == 3:  # Dead
                 G.add_node(node, color=BLACK)  # Use RGB tuple for black
+            elif grid[i, j] == 4:  # Vaccinated
+                G.add_node(node, color=DODGER_BLUE)  # Use RGB tuple for Dodger Blue
 
 def draw_graph():
     ax.clear()
@@ -125,10 +133,10 @@ def draw_graph():
     return pygame.image.frombuffer(buf.tobytes(), canvas.get_width_height(), "RGBA")
 
 # Load initial grid state from CSV
-grid = load_grid_from_csv("initial_statelaksjf.csv")
+grid = load_grid_from_csv("initial_stateasdflkj.csv")
 
 # Track population over time
-population_data = {disease: {"susceptible": [], "infected": [], "immune": [], "dead": []} for disease in DISEASES}
+population_data = {disease: {"susceptible": [], "infected": [], "immune": [], "dead": [], "vaccinated": []} for disease in DISEASES}
 
 running = True
 simulation_running = False  # Variable to control the simulation state
@@ -144,12 +152,14 @@ while running:
             x, y = pygame.mouse.get_pos()
             # Convert the position to grid coordinates
             i, j = y // CELL_SIZE, x // CELL_SIZE
-            # Toggle the state of the cell (only allow setting to susceptible or infected)
+            # Toggle the state of the cell (only allow setting to susceptible, infected, or vaccinated)
             if 0 <= i < GRID_NUMBER and 0 <= j < GRID_NUMBER:
                 if grid[i, j] == 0:
                     grid[i, j] = 1  # Set to infected
                 elif grid[i, j] == 1:
                     grid[i, j] = 0  # Set to susceptible
+                elif grid[i, j] == 4:
+                    grid[i, j] = 0  # Set to susceptible (optional)
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 # Toggle the simulation state
@@ -160,6 +170,12 @@ while running:
                 current_disease = "HIV"
             elif event.key == pygame.K_b:
                 current_disease = "Bird Flu"
+            elif event.key == pygame.K_v:
+                # Vaccinate a cell (set to state 4)
+                x, y = pygame.mouse.get_pos()
+                i, j = y // CELL_SIZE, x // CELL_SIZE
+                if 0 <= i < GRID_NUMBER and 0 <= j < GRID_NUMBER:
+                    grid[i, j] = 4  # Set to vaccinated
 
     if simulation_running and current_disease:
         grid = update_grid(grid, current_disease)
@@ -168,6 +184,7 @@ while running:
         population_data[current_disease]["infected"].append(np.sum(grid == 1))
         population_data[current_disease]["immune"].append(np.sum(grid == 2))
         population_data[current_disease]["dead"].append(np.sum(grid == 3))
+        population_data[current_disease]["vaccinated"].append(np.sum(grid == 4))
     
     build_graph(grid, current_disease if current_disease else "COVID-19")
     
@@ -180,8 +197,10 @@ while running:
                 color = DISEASES[current_disease]["color"] if current_disease else WHITE  # Infected
             elif grid[i, j] == 2:
                 color = GREEN  # Immune
-            else:
+            elif grid[i, j] == 3:
                 color = BLACK  # Dead
+            elif grid[i, j] == 4:
+                color = DODGER_BLUE  # Vaccinated
             pygame.draw.rect(screen, color, (j * CELL_SIZE, i * CELL_SIZE, CELL_SIZE, CELL_SIZE))
     
     # Draw the graph
@@ -201,6 +220,7 @@ for disease, data in population_data.items():
     plt.plot(data["infected"], label="Infected")
     plt.plot(data["immune"], label="Immune")
     plt.plot(data["dead"], label="Dead")
+    plt.plot(data["vaccinated"], label="Vaccinated")
     plt.title(f"Population vs. Time for {disease}")
     plt.xlabel("Time Steps")
     plt.ylabel("Population")
